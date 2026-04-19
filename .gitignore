@@ -1,0 +1,14 @@
+# Archive
+0 Archive/
+
+# Python virtual environment
+.venv/
+
+# IDE settings
+.vscode/
+
+# Data files
+data/preprocessed/
+data/*.npz
+data/*.csv
+data/*.npy
