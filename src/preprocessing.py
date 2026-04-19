@@ -1,17 +1,10 @@
-"""
-preprocessing.py — Image preprocessing utilities for binary image classification.
+"""Image preprocessing utilities for binary image classification."""
 
-Pipeline per image: resize with padding → grayscale → 4× rotational augmentation.
-"""
-
-import logging
 import os
 
 import pandas as pd
 from PIL import Image
 from tqdm import tqdm
-
-logger = logging.getLogger(__name__)
 
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff"}
 
@@ -23,8 +16,8 @@ _SUBDIRS = [
 ]
 
 
-def resize_with_padding(image: Image.Image, target_size: tuple = (75, 75)) -> Image.Image:
-    """Scale *image* to fit within *target_size* preserving aspect ratio, pad with black."""
+def resize_with_padding(image, target_size=(75, 75)):
+    """Scale image to fit target_size preserving aspect ratio, pad with black."""
     target_w, target_h = target_size
     orig_w, orig_h = image.size
 
@@ -42,11 +35,8 @@ def resize_with_padding(image: Image.Image, target_size: tuple = (75, 75)) -> Im
     return canvas
 
 
-def generate_rotations(image: Image.Image) -> dict:
-    """Return four CCW rotational copies of *image* (0°, 90°, 180°, 270°).
-
-    ``expand=False`` is safe because the image is square after preprocessing.
-    """
+def generate_rotations(image):
+    """Return dict of four CCW rotational copies (0°, 90°, 180°, 270°)."""
     return {
         "0":   image,
         "90":  image.rotate(90,  expand=False),
@@ -55,25 +45,8 @@ def generate_rotations(image: Image.Image) -> dict:
     }
 
 
-def preprocess_dataset(
-    data_root: str,
-    output_root: str,
-    target_size: tuple = (75, 75),
-) -> pd.DataFrame:
-    """Preprocess every image in the dataset and save rotational augmentations.
-
-    For each valid image: resize_with_padding → grayscale → generate_rotations.
-    Each of the four variants is saved under *output_root* mirroring the
-    split/label directory structure, with a rotation suffix before the extension
-    (e.g. ``roof_001_rot90.png``).
-
-    Returns
-    -------
-    pd.DataFrame
-        One row per saved variant. Columns: ``original_filepath``,
-        ``output_filepath``, ``split``, ``label``, ``rotation``,
-        ``width``, ``height``.
-    """
+def preprocess_dataset(data_root, output_root, target_size=(75, 75)):
+    """Resize, grayscale, and 4× rotate every image; returns a DataFrame of saved variants."""
     candidates = []
     for split_dir, label_dir, split, label in _SUBDIRS:
         folder = os.path.join(data_root, split_dir, label_dir)
@@ -87,22 +60,11 @@ def preprocess_dataset(
 
     rows = []
     for fpath, split, label in tqdm(candidates, desc="Preprocessing images"):
-        try:
-            image = Image.open(fpath)
-            image.load()  # Ensure the file is fully read before processing.
-        except Exception as exc:
-            logger.warning("Skipping %s — could not load: %s", fpath, exc)
-            continue
+        image = Image.open(fpath)
+        padded = resize_with_padding(image, target_size)
+        gray = padded.convert("L")
+        rotations = generate_rotations(gray)
 
-        try:
-            padded = resize_with_padding(image, target_size)
-            gray = padded.convert("L")
-            rotations = generate_rotations(gray)
-        except Exception as exc:
-            logger.warning("Skipping %s — preprocessing failed: %s", fpath, exc)
-            continue
-
-        # Mirror the split/label directory structure under output_root.
         rel_path = os.path.relpath(fpath, data_root)
         rel_dir = os.path.dirname(rel_path)
         base, ext = os.path.splitext(os.path.basename(rel_path))
@@ -113,11 +75,7 @@ def preprocess_dataset(
         for angle, rot_img in rotations.items():
             out_fname = f"{base}_rot{angle}{ext}"
             out_path = os.path.join(out_dir, out_fname)
-            try:
-                rot_img.save(out_path)
-            except Exception as exc:
-                logger.warning("Could not save %s: %s", out_path, exc)
-                continue
+            rot_img.save(out_path)
 
             rows.append({
                 "original_filepath": fpath,
